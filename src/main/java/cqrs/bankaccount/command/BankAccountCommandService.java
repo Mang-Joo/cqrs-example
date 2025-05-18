@@ -77,6 +77,6 @@ public class BankAccountCommandService {
 
     private BankAccount loadAccount(UUID aggregateId) {
         List<Event> events = eventStore.load(aggregateId);
-        return new BankAccount(aggregateId, events);
+        return BankAccount.load(aggregateId, events);
     }
 }

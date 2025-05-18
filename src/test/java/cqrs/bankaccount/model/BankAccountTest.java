@@ -59,7 +59,7 @@ class BankAccountTest {
         bankAccount.deposit(BigDecimal.valueOf(100));
         bankAccount.deposit(BigDecimal.valueOf(50));
 
-        BankAccount loadedBankAccount = new BankAccount(bankAccount.getAggregateId(), bankAccount.getUncommittedEvents());
+        BankAccount loadedBankAccount = BankAccount.load(bankAccount.getAggregateId(), bankAccount.getUncommittedEvents());
         assertThat(loadedBankAccount.getBalance()).isEqualTo(BigDecimal.valueOf(150));
         assertThat(loadedBankAccount.getUncommittedEvents()).hasSize(3);
     }

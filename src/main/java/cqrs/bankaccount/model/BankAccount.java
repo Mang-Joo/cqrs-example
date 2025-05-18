@@ -34,8 +34,12 @@ public class BankAccount {
         aggregateRoot.applyEvent(event);
     }
 
-    public BankAccount(UUID aggregateId, List<Event> events) {
+    private BankAccount(UUID aggregateId, List<Event> events) {
         this.aggregateRoot = new AggregateRoot(aggregateId, events, this::handleEvent);
+    }
+
+    public static BankAccount load(UUID aggregateId, List<Event> events) {
+        return new BankAccount(aggregateId, events);
     }
 
     private void handleEvent(Event event) {
@@ -175,5 +179,9 @@ public class BankAccount {
 
     public BigDecimal getBalance() {
         return balance;
+    }
+
+    public int getNextVersion() {
+        return aggregateRoot.nextVersion();
     }
 }
