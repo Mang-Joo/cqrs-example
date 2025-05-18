@@ -4,117 +4,121 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.math.BigDecimal;
-import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
-
-import cqrs.bankaccount.model.event.CreateAccountEvent;
-import cqrs.bankaccount.model.event.DepositEvent;
-import cqrs.bankaccount.model.event.TransferEvent;
-import cqrs.bankaccount.model.event.WithdrawEvent;
 
 class BankAccountTest {
 
     @Test
     void create_account_success() {
-        BankAccount bankAccount = BankAccount.create(new CreateAccountEvent("1234567890", "John Doe", 0));
+        // When
+        BankAccount bankAccount = new BankAccount("1234567890", "John Doe");
 
+        // Then
         assertThat(bankAccount.getAccountNumber()).isEqualTo("1234567890");
         assertThat(bankAccount.getAccountHolder()).isEqualTo("John Doe");
         assertThat(bankAccount.getBalance()).isEqualTo(BigDecimal.ZERO);
-        assertThat(bankAccount.getEvents()).hasSize(1);
+        assertThat(bankAccount.getUncommittedEvents()).hasSize(1);
+    }
+
+    @Test
+    void create_account_fail_invalid_accountNumber() {
+        // When & Then
+        assertThatThrownBy(() -> new BankAccount("", "John Doe"))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void create_account_fail_invalid_accountHolder() {
+        // When & Then
+        assertThatThrownBy(() -> new BankAccount("1234567890", ""))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void deposit_success() {
-        BankAccount bankAccount = BankAccount.create(new CreateAccountEvent("1234567890", "John Doe", 0));
-        bankAccount.deposit(new DepositEvent(BigDecimal.valueOf(100), bankAccount.nextVersion()));
+        BankAccount bankAccount = new BankAccount("1234567890", "John Doe");
+        bankAccount.deposit(BigDecimal.valueOf(100));
 
         assertThat(bankAccount.getBalance()).isEqualTo(BigDecimal.valueOf(100));
     }
 
     @Test
     void deposit_fail_less_than_10() {
-        BankAccount bankAccount = BankAccount.create(new CreateAccountEvent("1234567890", "John Doe", 0));
+        BankAccount bankAccount = new BankAccount("1234567890", "John Doe");
         BigDecimal depositAmount = BigDecimal.valueOf(9);
-        DepositEvent depositEvent = new DepositEvent(depositAmount, bankAccount.nextVersion());
 
-        assertThatThrownBy(() -> bankAccount.deposit(depositEvent))
+        assertThatThrownBy(() -> bankAccount.deposit(depositAmount))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("Amount must be greater than 10");
     }
 
     @Test
     void event_load_success() {
-        BankAccount bankAccount = BankAccount.create(new CreateAccountEvent("1234567890", "John Doe", 0));
-        bankAccount.deposit(new DepositEvent(BigDecimal.valueOf(100), bankAccount.nextVersion()));
-        bankAccount.deposit(new DepositEvent(BigDecimal.valueOf(50), bankAccount.nextVersion()));
+        BankAccount bankAccount = new BankAccount("1234567890", "John Doe");
+        bankAccount.deposit(BigDecimal.valueOf(100));
+        bankAccount.deposit(BigDecimal.valueOf(50));
 
-        BankAccount loadedBankAccount = new BankAccount(bankAccount.getAggregateId(), bankAccount.getEvents());
+        BankAccount loadedBankAccount = new BankAccount(bankAccount.getAggregateId(), bankAccount.getUncommittedEvents());
         assertThat(loadedBankAccount.getBalance()).isEqualTo(BigDecimal.valueOf(150));
-        assertThat(loadedBankAccount.getEvents()).hasSize(3);
+        assertThat(loadedBankAccount.getUncommittedEvents()).hasSize(3);
     }
 
     @Test
     void withdraw_success() {
-        BankAccount bankAccount = BankAccount.create(new CreateAccountEvent("1234567890", "John Doe", 0));
-        bankAccount.deposit(new DepositEvent(BigDecimal.valueOf(100), bankAccount.nextVersion()));
-        bankAccount.withdraw(new WithdrawEvent(BigDecimal.valueOf(50), bankAccount.nextVersion()));
+        BankAccount bankAccount = new BankAccount("1234567890", "John Doe");
+        bankAccount.deposit(BigDecimal.valueOf(100));
+        bankAccount.withdraw(BigDecimal.valueOf(50));
 
         assertThat(bankAccount.getBalance()).isEqualTo(BigDecimal.valueOf(50));
     }
 
     @Test
     void withdraw_fail_insufficient_balance() {
-        BankAccount bankAccount = BankAccount.create(new CreateAccountEvent("1234567890", "John Doe", 0));
-        bankAccount.deposit(new DepositEvent(BigDecimal.valueOf(100), bankAccount.nextVersion()));
-        WithdrawEvent withdrawEvent = new WithdrawEvent(BigDecimal.valueOf(150), bankAccount.nextVersion());
+        BankAccount bankAccount = new BankAccount("1234567890", "John Doe");
+        bankAccount.deposit(BigDecimal.valueOf(100));
 
-        assertThatThrownBy(() -> bankAccount.withdraw(withdrawEvent))
+        assertThatThrownBy(() -> bankAccount.withdraw(BigDecimal.valueOf(150)))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Insufficient balance");
+                .hasMessage("Insufficient funds");
     }
 
     @Test
     void withdraw_fail_less_than_0() {
-        BankAccount bankAccount = BankAccount.create(new CreateAccountEvent("1234567890", "John Doe", 0));
-        bankAccount.deposit(new DepositEvent(BigDecimal.valueOf(100), bankAccount.nextVersion()));
-        WithdrawEvent withdrawEvent = new WithdrawEvent(BigDecimal.valueOf(0), bankAccount.nextVersion());
+        BankAccount bankAccount = new BankAccount("1234567890", "John Doe");
+        bankAccount.deposit(BigDecimal.valueOf(100));
 
-        assertThatThrownBy(() -> bankAccount.withdraw(withdrawEvent))
+        assertThatThrownBy(() -> bankAccount.withdraw(BigDecimal.valueOf(0)))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Amount must be greater than 0");
+                .hasMessage("Amount must be positive");
     }
 
     @Test
     void transfer_success_sender() {
-        BankAccount bankAccount = BankAccount.create(new CreateAccountEvent("1234567890", "John Doe", 0));
-        bankAccount.deposit(new DepositEvent(BigDecimal.valueOf(100), bankAccount.nextVersion()));
-        UUID toAccountId = UUID.randomUUID();
+        BankAccount bankAccount = new BankAccount("1234567890", "John Doe");
+        bankAccount.deposit(BigDecimal.valueOf(100));
 
-        bankAccount.withdrawForTransfer(new TransferEvent(bankAccount.getAggregateId(), toAccountId, BigDecimal.valueOf(50), bankAccount.nextVersion()));
+        bankAccount.transferTo("0987654321", BigDecimal.valueOf(50));
 
         assertThat(bankAccount.getBalance()).isEqualTo(BigDecimal.valueOf(50));
     }
 
     @Test
     void transfer_success_receiver() {
-        BankAccount bankAccount = BankAccount.create(new CreateAccountEvent("1234567890", "John Doe", 0));
-        bankAccount.depositForTransfer(new TransferEvent(UUID.randomUUID(), bankAccount.getAggregateId(), BigDecimal.valueOf(50), bankAccount.nextVersion()));
+        BankAccount bankAccount = new BankAccount("1234567890", "John Doe");
+        bankAccount.transferFrom("0987654321", BigDecimal.valueOf(50));
 
         assertThat(bankAccount.getBalance()).isEqualTo(BigDecimal.valueOf(50));
     }
 
     @Test
     void transfer_fail_insufficient_balance_sender() {
-        BankAccount bankAccount = BankAccount.create(new CreateAccountEvent("1234567890", "John Doe", 0));
-        bankAccount.deposit(new DepositEvent(BigDecimal.valueOf(100), bankAccount.nextVersion()));
+        BankAccount bankAccount = new BankAccount("1234567890", "John Doe");
+        bankAccount.deposit(BigDecimal.valueOf(100));
 
-        TransferEvent transferEvent = new TransferEvent(bankAccount.getAggregateId(), UUID.randomUUID(), BigDecimal.valueOf(150), bankAccount.nextVersion());
-
-        assertThatThrownBy(() -> bankAccount.withdrawForTransfer(transferEvent))
+        assertThatThrownBy(() -> bankAccount.transferTo("0987654321", BigDecimal.valueOf(150)))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Insufficient balance");
+                .hasMessage("Insufficient funds");
     }
 
 }
