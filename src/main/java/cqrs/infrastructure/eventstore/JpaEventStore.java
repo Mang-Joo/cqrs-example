@@ -24,11 +24,11 @@ public class JpaEventStore implements EventStore {
             String eventData = objectMapper.writeValueAsString(event);
             EventEntity entity = new EventEntity(
                     aggregateId,
-                    event.getEventId(),
+                    event.eventId(),
                     event.getClass().getName(),
                     eventData,
-                    event.getVersion(),
-                    event.getTimestamp()
+                    event.version(),
+                    event.timestamp()
             );
             eventJpaRepository.save(entity);
         } catch (Exception e) {
@@ -42,7 +42,7 @@ public class JpaEventStore implements EventStore {
         return entities
                 .stream()
                 .map(this::deserializeEvent)
-                .sorted(Comparator.comparing(Event::getVersion))
+                .sorted(Comparator.comparing(Event::version))
                 .toList();
     }
 

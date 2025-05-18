@@ -1,8 +1,8 @@
 package cqrs.bankaccount.command;
 
-public record BankAccountCreateCommand(String accountNumber, String accountHolder) {
+public record BankAccountCreatedCommand(String accountNumber, String accountHolder) {
 
-    public BankAccountCreateCommand {
+    public BankAccountCreatedCommand {
         if (accountNumber == null || accountNumber.isEmpty()) {
             throw new IllegalArgumentException("accountNumber is required");
         }

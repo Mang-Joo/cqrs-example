@@ -1,21 +1,17 @@
 package cqrs.bankaccount.command;
 
+import java.util.List;
+import java.util.UUID;
+
+import org.springframework.stereotype.Service;
+
 import cqrs.bankaccount.model.BankAccount;
 import cqrs.bankaccount.model.BankAccountValidation;
-import cqrs.bankaccount.model.event.CreateAccountEvent;
-import cqrs.bankaccount.model.event.DepositEvent;
-import cqrs.bankaccount.model.event.TransferEvent;
-import cqrs.bankaccount.model.event.WithdrawEvent;
 import cqrs.bankaccount.query.BankAccountQueryService;
 import cqrs.common.Event;
 import cqrs.common.EventStore;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
-
-import java.math.BigDecimal;
-import java.util.List;
-import java.util.UUID;
 
 @Slf4j
 @Service
@@ -25,61 +21,62 @@ public class BankAccountCommandService {
     private final BankAccountValidation validation;
     private final BankAccountQueryService queryService;
 
-    public BankAccount createAccount(BankAccountCreateCommand command) {
+    public BankAccount createAccount(BankAccountCreatedCommand command) {
         if (validation.exists(command.accountNumber())) {
             throw new IllegalArgumentException("Account number already exists");
         }
 
-        CreateAccountEvent event = new CreateAccountEvent(command.accountNumber(), command.accountHolder(), 0);
-        BankAccount account = BankAccount.create(event);
-        log.info("Account created. accountNumber={}, accountHolder={}", command.accountNumber(), command.accountHolder());
+        BankAccount account = new BankAccount(command.accountNumber(), command.accountHolder());
+
+        saveEvents(account);
+        log.info("계좌가 생성되었습니다. 계좌번호={}, 계좌주={}", command.accountNumber(), command.accountHolder());
         return account;
     }
 
-    public BankAccount deposit(String accountNumber, BigDecimal amount) {
-        UUID aggregateId = queryService.getAggregateIdByAccountNumber(accountNumber);
-        List<Event> events = eventStore.load(aggregateId);
-        BankAccount account = new BankAccount(aggregateId, events);
+    public BankAccount deposit(BankAccountDepositCommand command) {
+        BankAccount account = loadAccount(queryService.getAggregateIdByAccountNumber(command.accountNumber()));
 
-        DepositEvent event = new DepositEvent(amount, account.nextVersion());
-        account.deposit(event);
+        account.deposit(command.amount());
 
-        eventStore.save(aggregateId, event);
-        log.info("Deposit completed. accountNumber={}, amount={}", accountNumber, amount);
+        saveEvents(account);
+
+        log.info("입금이 완료되었습니다. 계좌번호={}, 금액={}", command.accountNumber(), command.amount());
         return account;
     }
 
-    public BankAccount withdraw(String accountNumber, BigDecimal amount) {
-        UUID aggregateId = queryService.getAggregateIdByAccountNumber(accountNumber);
-        List<Event> events = eventStore.load(aggregateId);
-        BankAccount account = new BankAccount(aggregateId, events);
+    public BankAccount withdraw(BankAccountWithdrawCommand command) {
+        BankAccount account = loadAccount(queryService.getAggregateIdByAccountNumber(command.accountNumber()));
 
-        WithdrawEvent event = new WithdrawEvent(amount, account.nextVersion());
-        account.withdraw(event);
+        account.withdraw(command.amount());
 
-        eventStore.save(aggregateId, event);
-        log.info("Withdraw completed. accountNumber={}, amount={}", accountNumber, amount);
+        saveEvents(account);
+
+        log.info("출금이 완료되었습니다. 계좌번호={}, 금액={}", command.accountNumber(), command.amount());
         return account;
     }
 
-    public BankAccount transfer(String fromAccountNumber, String toAccountNumber, BigDecimal amount) {
-        UUID fromAggregateId = queryService.getAggregateIdByAccountNumber(fromAccountNumber);
-        UUID toAggregateId = queryService.getAggregateIdByAccountNumber(toAccountNumber);
+    public BankAccount transfer(BankAccountTransferCommand command) {
+        BankAccount fromAccount = loadAccount(queryService.getAggregateIdByAccountNumber(command.fromAccountNumber()));
+        BankAccount toAccount = loadAccount(queryService.getAggregateIdByAccountNumber(command.toAccountNumber()));
 
-        List<Event> fromEvents = eventStore.load(fromAggregateId);
-        List<Event> toEvents = eventStore.load(toAggregateId);
+        fromAccount.transferTo(command.toAccountNumber(), command.amount());
+        toAccount.transferFrom(command.fromAccountNumber(), command.amount());
 
-        BankAccount fromAccount = new BankAccount(fromAggregateId, fromEvents);
-        BankAccount toAccount = new BankAccount(toAggregateId, toEvents);
+        saveEvents(fromAccount);
+        saveEvents(toAccount);
 
-        TransferEvent event = new TransferEvent(fromAggregateId, toAggregateId, amount, fromAccount.nextVersion());
-        fromAccount.withdrawForTransfer(event);
-        toAccount.depositForTransfer(event);
-
-        eventStore.save(fromAggregateId, event);
-        eventStore.save(toAggregateId, event);
-
-        log.info("Transfer completed. fromAccountNumber={}, toAccountNumber={}, amount={}", fromAccountNumber, toAccountNumber, amount);
+        log.info("송금이 완료되었습니다. 출금계좌={}, 입금계좌={}, 금액={}", command.fromAccountNumber(), command.toAccountNumber(), command.amount());
         return fromAccount;
+    }
+
+    private void saveEvents(BankAccount account) {
+        account.getUncommittedEvents()
+            .forEach(event -> eventStore.save(account.getAggregateId(), event));
+        account.clearUncommittedEvents();
+    }
+
+    private BankAccount loadAccount(UUID aggregateId) {
+        List<Event> events = eventStore.load(aggregateId);
+        return new BankAccount(aggregateId, events);
     }
 }
