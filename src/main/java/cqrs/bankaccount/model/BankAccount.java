@@ -1,118 +1,179 @@
 package cqrs.bankaccount.model;
 
-import cqrs.bankaccount.model.event.CreateAccountEvent;
-import cqrs.bankaccount.model.event.DepositEvent;
-import cqrs.bankaccount.model.event.TransferEvent;
-import cqrs.bankaccount.model.event.WithdrawEvent;
-import cqrs.common.Aggregate;
-import cqrs.common.Event;
-import lombok.Getter;
-
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
-@Getter
-public class BankAccount extends Aggregate {
+import cqrs.bankaccount.model.event.AccountCreatedEvent;
+import cqrs.bankaccount.model.event.MoneyDepositedEvent;
+import cqrs.bankaccount.model.event.MoneyTransferEvent;
+import cqrs.bankaccount.model.event.MoneyWithdrawnEvent;
+import cqrs.common.AggregateRoot;
+import cqrs.common.Event;
+
+public class BankAccount {
+    private final AggregateRoot aggregateRoot;
     private String accountNumber;
     private String accountHolder;
     private BigDecimal balance;
 
+    public BankAccount(String accountNumber, String accountHolder) {
+        validation(accountNumber, accountHolder);
+
+        this.aggregateRoot = new AggregateRoot(this::handleEvent);
+
+        AccountCreatedEvent event = new AccountCreatedEvent(
+            UUID.randomUUID(),
+            aggregateRoot.getAggregateId(),
+            accountNumber,
+            accountHolder,
+            LocalDateTime.now(),
+            aggregateRoot.nextVersion()
+        );
+        aggregateRoot.applyEvent(event);
+    }
+
     public BankAccount(UUID aggregateId, List<Event> events) {
-        super(aggregateId, events);
+        this.aggregateRoot = new AggregateRoot(aggregateId, events, this::handleEvent);
     }
 
-    private BankAccount() {
-        super();
-    }
-
-    public static BankAccount create(CreateAccountEvent event) {
-        if (event.getAccountNumber() == null || event.getAccountNumber().isBlank()) {
-            throw new IllegalArgumentException("Account number is required");
-        }
-        if (event.getAccountHolder() == null || event.getAccountHolder().isBlank()) {
-            throw new IllegalArgumentException("Account holder is required");
-        }
-        BankAccount account = new BankAccount();
-        account.applyEvent(event);
-        return account;
-    }
-
-    public void deposit(DepositEvent event) {
-        if (event.getAmount().compareTo(BigDecimal.TEN) <= 0) {
-            throw new IllegalArgumentException("Amount must be greater than 10");
-        }
-        this.applyEvent(event);
-    }
-
-    public void withdraw(WithdrawEvent event) {
-        if (event.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
-            throw new IllegalArgumentException("Amount must be greater than 0");
-        }
-        if (event.getAmount().compareTo(this.balance) > 0) {
-            throw new IllegalArgumentException("Insufficient balance");
-        }
-        this.applyEvent(event);
-    }
-
-    public void withdrawForTransfer(TransferEvent event) {
-        if (event.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
-            throw new IllegalArgumentException("Amount must be greater than 0");
-        }
-        if (event.getAmount().compareTo(this.balance) > 0) {
-            throw new IllegalArgumentException("Insufficient balance");
-        }
-        this.applyEvent(event);
-    }
-
-    public void depositForTransfer(TransferEvent event) {
-        if (event.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
-            throw new IllegalArgumentException("Amount must be greater than 0");
-        }
-        this.applyEvent(event);
-    }
-
-    @Override
-    protected void apply(Event event) {
+    private void handleEvent(Event event) {
         switch (event) {
-            case CreateAccountEvent createAccountEvent -> apply(createAccountEvent);
-            case DepositEvent depositEvent -> apply(depositEvent);
-            case WithdrawEvent withdrawEvent -> apply(withdrawEvent);
-            case TransferEvent transferEvent -> apply(transferEvent);
-            default ->
-                    throw new IllegalArgumentException("Unsupported event type: " + event.getClass().getSimpleName());
+            case AccountCreatedEvent e -> apply(e);
+            case MoneyDepositedEvent e -> apply(e);
+            case MoneyWithdrawnEvent e -> apply(e);
+            case MoneyTransferEvent e -> apply(e);
+            default -> throw new IllegalArgumentException("Unsupported event type: " + event.getClass().getName());
         }
     }
 
-    private void apply(DepositEvent depositEvent) {
-        this.balance = this.balance.add(depositEvent.getAmount());
-    }
-
-    private void apply(WithdrawEvent withdrawEvent) {
-        this.balance = this.balance.subtract(withdrawEvent.getAmount());
-    }
-
-    private void apply(TransferEvent transferEvent) {
-        if (isSender(transferEvent)) {
-            this.balance = this.balance.subtract(transferEvent.getAmount());
-        } else if (isReceiver(transferEvent)) {
-            this.balance = this.balance.add(transferEvent.getAmount());
-        } else {
-            throw new IllegalArgumentException("Invalid transfer event");
-        }
-    }
-
-    private void apply(CreateAccountEvent createAccountEvent) {
-        this.accountNumber = createAccountEvent.getAccountNumber();
-        this.accountHolder = createAccountEvent.getAccountHolder();
+    private void apply(AccountCreatedEvent event) {
+        this.accountNumber = event.accountNumber();
+        this.accountHolder = event.accountHolder();
         this.balance = BigDecimal.ZERO;
     }
 
-    private boolean isSender(TransferEvent transferEvent) {
-        return transferEvent.getFromAccountId().equals(this.getAggregateId());
+    private void apply(MoneyDepositedEvent event) {
+        this.balance = this.balance.add(event.amount());
     }
 
-    private boolean isReceiver(TransferEvent transferEvent) {
-        return transferEvent.getToAccountId().equals(this.getAggregateId());
+    private void apply(MoneyWithdrawnEvent event) {
+        this.balance = this.balance.subtract(event.amount());
+    }
+
+    private void apply(MoneyTransferEvent event) {
+        if (event.fromAccountNumber().equals(accountNumber)) {
+            this.balance = this.balance.subtract(event.amount());
+        } else if (event.toAccountNumber().equals(accountNumber)) {
+            this.balance = this.balance.add(event.amount());
+        } else {
+            throw new IllegalArgumentException("Invalid account number");
+        }
+    }
+
+    private void validation(String accountNumber, String accountHolder) {
+        if (accountNumber == null || accountNumber.isEmpty()) {
+            throw new IllegalArgumentException("Account number is required");
+        }
+
+        if (accountHolder == null || accountHolder.isEmpty()) {
+            throw new IllegalArgumentException("Account holder is required");
+        }
+    }
+
+    public void deposit(BigDecimal amount) {
+        if (amount.compareTo(BigDecimal.valueOf(10)) < 0) {
+            throw new IllegalArgumentException("Amount must be greater than 10");
+        }
+
+        MoneyDepositedEvent event = new MoneyDepositedEvent(
+            UUID.randomUUID(),
+            aggregateRoot.getAggregateId(),
+            amount,
+            LocalDateTime.now(),
+            aggregateRoot.nextVersion()
+        );
+        aggregateRoot.applyEvent(event);
+    }
+
+    public void withdraw(BigDecimal amount) {
+        if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException("Amount must be positive");
+        }
+
+        if (balance.compareTo(amount) < 0) {
+            throw new IllegalArgumentException("Insufficient funds");
+        }
+
+        MoneyWithdrawnEvent event = new MoneyWithdrawnEvent(
+            UUID.randomUUID(),
+            aggregateRoot.getAggregateId(),
+            amount,
+            LocalDateTime.now(),
+            aggregateRoot.nextVersion()
+        );
+        aggregateRoot.applyEvent(event);
+    }
+
+    public void transferTo(String toAccountNumber, BigDecimal amount) {
+        if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException("Amount must be positive");
+        }
+
+        if (balance.compareTo(amount) < 0) {
+            throw new IllegalArgumentException("Insufficient funds");
+        }
+
+        MoneyTransferEvent event = new MoneyTransferEvent(
+            UUID.randomUUID(),
+            aggregateRoot.getAggregateId(),
+            accountNumber,
+            toAccountNumber,
+            amount,
+            LocalDateTime.now(),
+            aggregateRoot.nextVersion()
+        );
+
+        aggregateRoot.applyEvent(event);
+    }
+
+    public void transferFrom(String fromAccountNumber, BigDecimal amount) {
+
+        MoneyTransferEvent event = new MoneyTransferEvent(
+            UUID.randomUUID(),
+            aggregateRoot.getAggregateId(),
+            fromAccountNumber,
+            accountNumber,
+            amount,
+            LocalDateTime.now(),
+            aggregateRoot.nextVersion()
+        );
+
+        aggregateRoot.applyEvent(event);
+    }
+
+    public UUID getAggregateId() {
+        return aggregateRoot.getAggregateId();
+    }
+
+    public List<Event> getUncommittedEvents() {
+        return aggregateRoot.getUncommittedEvents();
+    }
+
+    public void clearUncommittedEvents() {
+        aggregateRoot.clearUncommittedEvents();
+    }
+
+    public String getAccountNumber() {
+        return accountNumber;
+    }
+
+    public String getAccountHolder() {
+        return accountHolder;
+    }
+
+    public BigDecimal getBalance() {
+        return balance;
     }
 }
