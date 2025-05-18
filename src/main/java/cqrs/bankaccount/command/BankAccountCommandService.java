@@ -29,7 +29,7 @@ public class BankAccountCommandService {
         BankAccount account = new BankAccount(command.accountNumber(), command.accountHolder());
 
         saveEvents(account);
-        log.info("계좌가 생성되었습니다. 계좌번호={}, 계좌주={}", command.accountNumber(), command.accountHolder());
+        log.info("Account created. accountNumber={}, accountHolder={}", command.accountNumber(), command.accountHolder());
         return account;
     }
 
@@ -40,7 +40,7 @@ public class BankAccountCommandService {
 
         saveEvents(account);
 
-        log.info("입금이 완료되었습니다. 계좌번호={}, 금액={}", command.accountNumber(), command.amount());
+        log.info("Deposit completed. accountNumber={}, amount={}", command.accountNumber(), command.amount());
         return account;
     }
 
@@ -51,7 +51,7 @@ public class BankAccountCommandService {
 
         saveEvents(account);
 
-        log.info("출금이 완료되었습니다. 계좌번호={}, 금액={}", command.accountNumber(), command.amount());
+        log.info("Withdrawal completed. accountNumber={}, amount={}", command.accountNumber(), command.amount());
         return account;
     }
 
@@ -65,7 +65,7 @@ public class BankAccountCommandService {
         saveEvents(fromAccount);
         saveEvents(toAccount);
 
-        log.info("송금이 완료되었습니다. 출금계좌={}, 입금계좌={}, 금액={}", command.fromAccountNumber(), command.toAccountNumber(), command.amount());
+        log.info("Transfer completed. fromAccount={}, toAccount={}, amount={}", command.fromAccountNumber(), command.toAccountNumber(), command.amount());
         return fromAccount;
     }
 
