@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.math.BigDecimal;
+import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 
@@ -12,7 +13,7 @@ class BankAccountTest {
     @Test
     void create_account_success() {
         // When
-        BankAccount bankAccount = new BankAccount("1234567890", "John Doe");
+        BankAccount bankAccount = new BankAccount("1234567890", "John Doe", UUID.randomUUID());
 
         // Then
         assertThat(bankAccount.getAccountNumber()).isEqualTo("1234567890");
@@ -24,20 +25,20 @@ class BankAccountTest {
     @Test
     void create_account_fail_invalid_accountNumber() {
         // When & Then
-        assertThatThrownBy(() -> new BankAccount("", "John Doe"))
+        assertThatThrownBy(() -> new BankAccount("", "John Doe", UUID.randomUUID()))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void create_account_fail_invalid_accountHolder() {
         // When & Then
-        assertThatThrownBy(() -> new BankAccount("1234567890", ""))
+        assertThatThrownBy(() -> new BankAccount("1234567890", "", UUID.randomUUID()))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void deposit_success() {
-        BankAccount bankAccount = new BankAccount("1234567890", "John Doe");
+        BankAccount bankAccount = new BankAccount("1234567890", "John Doe", UUID.randomUUID());
         bankAccount.deposit(BigDecimal.valueOf(100));
 
         assertThat(bankAccount.getBalance()).isEqualTo(BigDecimal.valueOf(100));
@@ -45,7 +46,7 @@ class BankAccountTest {
 
     @Test
     void deposit_fail_less_than_10() {
-        BankAccount bankAccount = new BankAccount("1234567890", "John Doe");
+        BankAccount bankAccount = new BankAccount("1234567890", "John Doe", UUID.randomUUID());
         BigDecimal depositAmount = BigDecimal.valueOf(9);
 
         assertThatThrownBy(() -> bankAccount.deposit(depositAmount))
@@ -55,18 +56,18 @@ class BankAccountTest {
 
     @Test
     void event_load_success() {
-        BankAccount bankAccount = new BankAccount("1234567890", "John Doe");
+        BankAccount bankAccount = new BankAccount("1234567890", "John Doe", UUID.randomUUID());
         bankAccount.deposit(BigDecimal.valueOf(100));
         bankAccount.deposit(BigDecimal.valueOf(50));
 
-        BankAccount loadedBankAccount = BankAccount.load(bankAccount.getAggregateId(), bankAccount.getUncommittedEvents());
+        BankAccount loadedBankAccount = BankAccount.loadFromHistory(bankAccount.getAggregateId(), bankAccount.getUncommittedEvents());
         assertThat(loadedBankAccount.getBalance()).isEqualTo(BigDecimal.valueOf(150));
-        assertThat(loadedBankAccount.getUncommittedEvents()).hasSize(3);
+        assertThat(loadedBankAccount.getUncommittedEvents()).isEmpty();
     }
 
     @Test
     void withdraw_success() {
-        BankAccount bankAccount = new BankAccount("1234567890", "John Doe");
+        BankAccount bankAccount = new BankAccount("1234567890", "John Doe", UUID.randomUUID());
         bankAccount.deposit(BigDecimal.valueOf(100));
         bankAccount.withdraw(BigDecimal.valueOf(50));
 
@@ -75,7 +76,7 @@ class BankAccountTest {
 
     @Test
     void withdraw_fail_insufficient_balance() {
-        BankAccount bankAccount = new BankAccount("1234567890", "John Doe");
+        BankAccount bankAccount = new BankAccount("1234567890", "John Doe", UUID.randomUUID());
         bankAccount.deposit(BigDecimal.valueOf(100));
 
         assertThatThrownBy(() -> bankAccount.withdraw(BigDecimal.valueOf(150)))
@@ -85,7 +86,7 @@ class BankAccountTest {
 
     @Test
     void withdraw_fail_less_than_0() {
-        BankAccount bankAccount = new BankAccount("1234567890", "John Doe");
+        BankAccount bankAccount = new BankAccount("1234567890", "John Doe", UUID.randomUUID());
         bankAccount.deposit(BigDecimal.valueOf(100));
 
         assertThatThrownBy(() -> bankAccount.withdraw(BigDecimal.valueOf(0)))
@@ -95,7 +96,7 @@ class BankAccountTest {
 
     @Test
     void transfer_success_sender() {
-        BankAccount bankAccount = new BankAccount("1234567890", "John Doe");
+        BankAccount bankAccount = new BankAccount("1234567890", "John Doe", UUID.randomUUID());
         bankAccount.deposit(BigDecimal.valueOf(100));
 
         bankAccount.transferTo("0987654321", BigDecimal.valueOf(50));
@@ -105,7 +106,7 @@ class BankAccountTest {
 
     @Test
     void transfer_success_receiver() {
-        BankAccount bankAccount = new BankAccount("1234567890", "John Doe");
+        BankAccount bankAccount = new BankAccount("1234567890", "John Doe", UUID.randomUUID());
         bankAccount.transferFrom("0987654321", BigDecimal.valueOf(50));
 
         assertThat(bankAccount.getBalance()).isEqualTo(BigDecimal.valueOf(50));
@@ -113,7 +114,7 @@ class BankAccountTest {
 
     @Test
     void transfer_fail_insufficient_balance_sender() {
-        BankAccount bankAccount = new BankAccount("1234567890", "John Doe");
+        BankAccount bankAccount = new BankAccount("1234567890", "John Doe", UUID.randomUUID());
         bankAccount.deposit(BigDecimal.valueOf(100));
 
         assertThatThrownBy(() -> bankAccount.transferTo("0987654321", BigDecimal.valueOf(150)))

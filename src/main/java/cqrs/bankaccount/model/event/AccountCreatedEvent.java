@@ -10,6 +10,7 @@ public record AccountCreatedEvent(
     UUID aggregateId,
     String accountNumber,
     String accountHolder,
+    UUID userId,
     LocalDateTime timestamp,
     int version
 ) implements Event {

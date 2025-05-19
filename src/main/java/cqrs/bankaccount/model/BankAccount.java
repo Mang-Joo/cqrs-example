@@ -14,13 +14,13 @@ import cqrs.common.Event;
 
 public class BankAccount {
     private final AggregateRoot aggregateRoot;
+    private UUID userId;
     private String accountNumber;
     private String accountHolder;
     private BigDecimal balance;
 
-    public BankAccount(String accountNumber, String accountHolder) {
-        validation(accountNumber, accountHolder);
-
+    public BankAccount(String accountNumber, String accountHolder, UUID userId) {
+        validation(accountNumber, accountHolder, userId);
         this.aggregateRoot = new AggregateRoot(this::handleEvent);
 
         AccountCreatedEvent event = new AccountCreatedEvent(
@@ -28,18 +28,40 @@ public class BankAccount {
             aggregateRoot.getAggregateId(),
             accountNumber,
             accountHolder,
+            userId,
             LocalDateTime.now(),
-            aggregateRoot.nextVersion()
+            aggregateRoot.getCurrentVersion() + 1
         );
-        aggregateRoot.applyEvent(event);
+        aggregateRoot.recordAndApplyEvent(event);
     }
 
     private BankAccount(UUID aggregateId, List<Event> events) {
         this.aggregateRoot = new AggregateRoot(aggregateId, events, this::handleEvent);
     }
 
-    public static BankAccount load(UUID aggregateId, List<Event> events) {
+    private BankAccount(UUID aggregateId, String accountNumber, String accountHolder, UUID userId, BigDecimal balance, int snapshotVersion) {
+        this.aggregateRoot = new AggregateRoot(aggregateId, snapshotVersion, this::handleEvent);
+        this.accountNumber = accountNumber;
+        this.accountHolder = accountHolder;
+        this.userId = userId;
+        this.balance = balance;
+    }
+
+    public void replayEventsAfterSnapshot(List<Event> events) {
+        for (Event event : events) {
+            this.aggregateRoot.replayEvent(event);
+        }
+    }
+
+    public static BankAccount loadFromHistory(UUID aggregateId, List<Event> events) {
+        if (events == null || events.isEmpty()) {
+            throw new IllegalArgumentException("Cannot reconstitute BankAccount from empty event list.");
+        }
         return new BankAccount(aggregateId, events);
+    }
+
+    public static BankAccount loadFromSnapshot(UUID aggregateId, String accountNumber, String accountHolder, UUID userId, BigDecimal balance, int version) {
+        return new BankAccount(aggregateId, accountNumber, accountHolder, userId, balance, version);
     }
 
     private void handleEvent(Event event) {
@@ -55,6 +77,7 @@ public class BankAccount {
     private void apply(AccountCreatedEvent event) {
         this.accountNumber = event.accountNumber();
         this.accountHolder = event.accountHolder();
+        this.userId = event.userId();
         this.balance = BigDecimal.ZERO;
     }
 
@@ -72,17 +95,19 @@ public class BankAccount {
         } else if (event.toAccountNumber().equals(accountNumber)) {
             this.balance = this.balance.add(event.amount());
         } else {
-            throw new IllegalArgumentException("Invalid account number");
+            throw new IllegalArgumentException("MoneyTransferEvent is not related to this account: " + accountNumber);
         }
     }
 
-    private void validation(String accountNumber, String accountHolder) {
+    private void validation(String accountNumber, String accountHolder, UUID userId) {
         if (accountNumber == null || accountNumber.isEmpty()) {
             throw new IllegalArgumentException("Account number is required");
         }
-
         if (accountHolder == null || accountHolder.isEmpty()) {
             throw new IllegalArgumentException("Account holder is required");
+        }
+        if (userId == null) {
+            throw new IllegalArgumentException("User ID is required");
         }
     }
 
@@ -96,16 +121,15 @@ public class BankAccount {
             aggregateRoot.getAggregateId(),
             amount,
             LocalDateTime.now(),
-            aggregateRoot.nextVersion()
+            aggregateRoot.getCurrentVersion() + 1
         );
-        aggregateRoot.applyEvent(event);
+        aggregateRoot.recordAndApplyEvent(event);
     }
 
     public void withdraw(BigDecimal amount) {
         if (amount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException("Amount must be positive");
         }
-
         if (balance.compareTo(amount) < 0) {
             throw new IllegalArgumentException("Insufficient funds");
         }
@@ -115,16 +139,15 @@ public class BankAccount {
             aggregateRoot.getAggregateId(),
             amount,
             LocalDateTime.now(),
-            aggregateRoot.nextVersion()
+            aggregateRoot.getCurrentVersion() + 1
         );
-        aggregateRoot.applyEvent(event);
+        aggregateRoot.recordAndApplyEvent(event);
     }
 
     public void transferTo(String toAccountNumber, BigDecimal amount) {
         if (amount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException("Amount must be positive");
         }
-
         if (balance.compareTo(amount) < 0) {
             throw new IllegalArgumentException("Insufficient funds");
         }
@@ -136,14 +159,12 @@ public class BankAccount {
             toAccountNumber,
             amount,
             LocalDateTime.now(),
-            aggregateRoot.nextVersion()
+            aggregateRoot.getCurrentVersion() + 1
         );
-
-        aggregateRoot.applyEvent(event);
+        aggregateRoot.recordAndApplyEvent(event);
     }
 
     public void transferFrom(String fromAccountNumber, BigDecimal amount) {
-
         MoneyTransferEvent event = new MoneyTransferEvent(
             UUID.randomUUID(),
             aggregateRoot.getAggregateId(),
@@ -151,10 +172,20 @@ public class BankAccount {
             accountNumber,
             amount,
             LocalDateTime.now(),
-            aggregateRoot.nextVersion()
+            aggregateRoot.getCurrentVersion() + 1
         );
+        aggregateRoot.recordAndApplyEvent(event);
+    }
 
-        aggregateRoot.applyEvent(event);
+    public BankAccountSnapshot createSnapshot() {
+        return new BankAccountSnapshot(
+                this.aggregateRoot.getAggregateId(),
+                this.accountNumber,
+                this.accountHolder,
+                this.balance,
+                this.aggregateRoot.getCurrentVersion(),
+                this.userId
+        );
     }
 
     public UUID getAggregateId() {
@@ -181,7 +212,11 @@ public class BankAccount {
         return balance;
     }
 
-    public int getNextVersion() {
-        return aggregateRoot.nextVersion();
+    public int getCurrentVersion() {
+        return aggregateRoot.getCurrentVersion();
+    }
+
+    public UUID getUserId() {
+        return userId;
     }
 }

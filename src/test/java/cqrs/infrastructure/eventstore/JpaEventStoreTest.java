@@ -25,17 +25,17 @@ class JpaEventStoreTest {
     @Test
     void testLoad() {
         UUID aggregateId = UUID.randomUUID();
-        jpaEventStore.save(aggregateId, new AccountCreatedEvent(UUID.randomUUID(), aggregateId, "1234567890", "John Doe", LocalDateTime.now(), 0));
+        jpaEventStore.save(aggregateId, new AccountCreatedEvent(UUID.randomUUID(), aggregateId, "1234567890", "John Doe", UUID.randomUUID(), LocalDateTime.now(), 0));
         jpaEventStore.save(aggregateId, new MoneyDepositedEvent(UUID.randomUUID(), aggregateId, BigDecimal.valueOf(100), LocalDateTime.now(), 1));
         List<Event> events = jpaEventStore.load(aggregateId);
 
-        BankAccount account = BankAccount.load(aggregateId, events);
+        BankAccount account = BankAccount.loadFromHistory(aggregateId, events);
 
 
         assertThat(account.getAccountNumber()).isEqualTo("1234567890");
         assertThat(account.getAccountHolder()).isEqualTo("John Doe");
         assertThat(account.getBalance()).isEqualTo(BigDecimal.valueOf(100));
-        assertThat(account.getNextVersion()).isEqualTo(events.size() + 1);
+        assertThat(account.getCurrentVersion()).isEqualTo(events.size() - 1);
 
         assertThat(events).hasSize(2);
         assertThat(events.get(0)).isInstanceOf(AccountCreatedEvent.class);

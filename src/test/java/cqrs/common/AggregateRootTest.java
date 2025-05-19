@@ -23,11 +23,11 @@ class AggregateRootTest {
         // Then
         assertThat(aggregateRoot.getAggregateId()).isNotNull();
         assertThat(aggregateRoot.getUncommittedEvents()).isEmpty();
-        assertThat(aggregateRoot.nextVersion()).isZero();
+        assertThat(aggregateRoot.getCurrentVersion()).isEqualTo(-1);
     }
 
     @Test
-    void create_aggregate_root_from_events() {
+    void create_aggregate_root_from_history() {
         // Given
         UUID aggregateId = UUID.randomUUID();
         TestEventApplier eventApplier = new TestEventApplier();
@@ -40,8 +40,8 @@ class AggregateRootTest {
 
         // Then
         assertThat(aggregateRoot.getAggregateId()).isEqualTo(aggregateId);
-        assertThat(aggregateRoot.getUncommittedEvents()).hasSize(2);
-        assertThat(aggregateRoot.nextVersion()).isEqualTo(events.size() + 1);
+        assertThat(aggregateRoot.getUncommittedEvents()).isEmpty();
+        assertThat(aggregateRoot.getCurrentVersion()).isEqualTo(events.size() - 1);
         assertThat(eventApplier.getAppliedEvents()).containsExactly(event1, event2);
     }
 
@@ -62,10 +62,10 @@ class AggregateRootTest {
         // Given
         TestEventApplier eventApplier = new TestEventApplier();
         AggregateRoot aggregateRoot = new AggregateRoot(eventApplier);
-        TestEvent event = new TestEvent("테스트 이벤트", aggregateRoot.getAggregateId(), aggregateRoot.nextVersion());
+        TestEvent event = new TestEvent("테스트 이벤트", aggregateRoot.getAggregateId(), aggregateRoot.getCurrentVersion() + 1);
 
         // When
-        aggregateRoot.applyEvent(event);
+        aggregateRoot.recordAndApplyEvent(event);
 
         // Then
         assertThat(aggregateRoot.getUncommittedEvents()).containsExactly(event);
@@ -77,8 +77,8 @@ class AggregateRootTest {
         // Given
         TestEventApplier eventApplier = new TestEventApplier();
         AggregateRoot aggregateRoot = new AggregateRoot(eventApplier);
-        TestEvent event = new TestEvent("테스트 이벤트", aggregateRoot.getAggregateId(), aggregateRoot.nextVersion());
-        aggregateRoot.applyEvent(event);
+        TestEvent event = new TestEvent("테스트 이벤트", aggregateRoot.getAggregateId(), aggregateRoot.getCurrentVersion() + 1);
+        aggregateRoot.recordAndApplyEvent(event);
 
         // When
         aggregateRoot.clearUncommittedEvents();
@@ -93,8 +93,8 @@ class AggregateRootTest {
         // Given
         TestEventApplier eventApplier = new TestEventApplier();
         AggregateRoot aggregateRoot = new AggregateRoot(eventApplier);
-        TestEvent event = new TestEvent("테스트 이벤트", aggregateRoot.getAggregateId(), aggregateRoot.nextVersion());
-        aggregateRoot.applyEvent(event);
+        TestEvent event = new TestEvent("테스트 이벤트", aggregateRoot.getAggregateId(), aggregateRoot.getCurrentVersion() + 1);
+        aggregateRoot.recordAndApplyEvent(event);
 
         // When
         List<Event> uncommittedEvents = aggregateRoot.getUncommittedEvents();

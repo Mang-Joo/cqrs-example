@@ -7,4 +7,6 @@ public interface EventStore {
     void save(UUID aggregateId, Event event);
 
     List<Event> load(UUID aggregateId);
+
+    List<Event> load(UUID aggregateId, int afterVersion);
 }

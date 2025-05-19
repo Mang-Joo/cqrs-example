@@ -1,6 +1,8 @@
 package cqrs.bankaccount.command;
 
-public record BankAccountCreatedCommand(String accountNumber, String accountHolder) {
+import java.util.UUID;
+
+public record BankAccountCreatedCommand(String accountNumber, String accountHolder, UUID userId) {
 
     public BankAccountCreatedCommand {
         if (accountNumber == null || accountNumber.isEmpty()) {
@@ -8,6 +10,10 @@ public record BankAccountCreatedCommand(String accountNumber, String accountHold
         }
         if (accountHolder == null || accountHolder.isEmpty()) {
             throw new IllegalArgumentException("accountHolder is required");
+        }
+
+        if (userId == null) {
+            throw new IllegalArgumentException("userId is required");
         }
     }
 }

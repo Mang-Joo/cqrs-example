@@ -54,4 +54,16 @@ public class JpaEventStore implements EventStore {
             throw new IllegalArgumentException("Event deserialization failed", e);
         }
     }
+
+    @Override
+    public List<Event> load(UUID aggregateId, int afterVersion) {
+        List<EventEntity> entities = eventJpaRepository
+                .findByAggregateIdAndEventVersionGreaterThanOrderByEventVersion(aggregateId, afterVersion);
+
+        return entities
+                .stream()
+                .map(this::deserializeEvent)
+                .sorted(Comparator.comparing(Event::version))
+                .toList();
+    }
 }
